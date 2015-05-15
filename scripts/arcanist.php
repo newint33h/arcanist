@@ -282,6 +282,12 @@ try {
     HTTPSFuture::setBlindlyTrustDomains($blind_trust);
   }
 
+  $ssl_key = $configuration_manager->getConfigFromAnySource('https.ssl_key');
+  $ssl_cert = $configuration_manager->getConfigFromAnySource('https.ssl_cert');
+  if ($ssl_key && $ssl_cert) {
+    HTTPSFuture::setClientCertificateFromPath($ssl_key, $ssl_cert);
+  }
+
   if ($need_conduit) {
     if (!$conduit_uri) {
 
