@@ -3,14 +3,14 @@
 /**
  * Facilitates implementation of test cases for @{class:ArcanistLinter}s.
  */
-abstract class ArcanistLinterTestCase extends ArcanistPhutilTestCase {
+abstract class ArcanistLinterTestCase extends PhutilTestCase {
 
   /**
    * Returns an instance of the linter being tested.
    *
    * @return ArcanistLinter
    */
-  protected final function getLinter() {
+  final protected function getLinter() {
     $matches = null;
     if (!preg_match('/^(\w+Linter)TestCase$/', get_class($this), $matches) ||
         !is_subclass_of($matches[1], 'ArcanistLinter')) {
@@ -20,7 +20,7 @@ abstract class ArcanistLinterTestCase extends ArcanistPhutilTestCase {
     return newv($matches[1], array());
   }
 
-  public abstract function testLinter();
+  abstract public function testLinter();
 
   /**
    * Executes all tests from the specified subdirectory. If a linter is not
@@ -107,7 +107,7 @@ abstract class ArcanistLinterTestCase extends ArcanistPhutilTestCase {
       $working_copy = ArcanistWorkingCopyIdentity::newFromRootAndConfigFile(
         $dir,
         null,
-        'Unit Test');
+        pht('Unit Test'));
       $configuration_manager = new ArcanistConfigurationManager();
       $configuration_manager->setWorkingCopyIdentity($working_copy);
 
@@ -148,7 +148,7 @@ abstract class ArcanistLinterTestCase extends ArcanistPhutilTestCase {
       $result = reset($results);
       $patcher = ArcanistLintPatcher::newFromArcanistLintResult($result);
       $after_lint = $patcher->getModifiedFileContent();
-    } catch (ArcanistPhutilTestTerminatedException $ex) {
+    } catch (PhutilTestTerminatedException $ex) {
       throw $ex;
     } catch (Exception $exception) {
       $caught_exception = true;

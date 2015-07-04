@@ -134,7 +134,7 @@ EOTEXT
           'hg diff --rev %R',
           hgsprintf('%s', $relative));
       } else {
-        throw new Exception('Unknown VCS!');
+        throw new Exception(pht('Unknown VCS!'));
       }
 
       echo phutil_console_wrap(
@@ -160,13 +160,14 @@ EOTEXT
       }
 
       echo phutil_console_wrap(
-        "%s\n\n%s\n\n    $ %s\n\n%s\n\n",
-        $will_be_sent,
-        pht(
-          'You can see the exact changes that will be sent by running '.
-          'this command:'),
-        $command,
-        pht('These commits will be included in the diff:'));
+        phutil_console_format(
+          "%s\n\n%s\n\n    $ %s\n\n%s\n\n",
+          $will_be_sent,
+          pht(
+            'You can see the exact changes that will be sent by running '.
+            'this command:'),
+          $command,
+          pht('These commits will be included in the diff:')));
 
       echo $commits."\n\n\n";
     }
@@ -192,7 +193,7 @@ EOTEXT
           'copy:')));
 
     if (empty($revisions)) {
-      echo "    (No revisions match.)\n";
+      echo "    ".pht('(No revisions match.)')."\n";
       echo "\n";
       echo phutil_console_wrap(
         phutil_console_format(

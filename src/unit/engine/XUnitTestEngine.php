@@ -101,7 +101,6 @@ class XUnitTestEngine extends ArcanistUnitTestEngine {
    * @return array   Array of test results.
    */
   public function run() {
-
     $this->loadEnvironment();
 
     if ($this->getRunAllTests()) {
@@ -251,7 +250,7 @@ class XUnitTestEngine extends ArcanistUnitTestEngine {
     try {
       $regenerate_future->resolvex();
       $result->setResult(ArcanistUnitTestResult::RESULT_PASS);
-    } catch(CommandException $exc) {
+    } catch (CommandException $exc) {
       if ($exc->getError() > 1) {
         throw $exc;
       }
@@ -297,7 +296,7 @@ class XUnitTestEngine extends ArcanistUnitTestEngine {
       try {
         $future->resolvex();
         $result->setResult(ArcanistUnitTestResult::RESULT_PASS);
-      } catch(CommandException $exc) {
+      } catch (CommandException $exc) {
         if ($exc->getError() > 1) {
           throw $exc;
         }
