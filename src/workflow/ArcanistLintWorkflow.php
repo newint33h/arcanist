@@ -9,7 +9,6 @@ final class ArcanistLintWorkflow extends ArcanistWorkflow {
   const RESULT_WARNINGS   = 1;
   const RESULT_ERRORS     = 2;
   const RESULT_SKIP       = 3;
-  const RESULT_POSTPONED  = 4;
 
   const DEFAULT_SEVERITY = ArcanistLintSeverity::SEVERITY_ADVICE;
 
@@ -19,7 +18,6 @@ final class ArcanistLintWorkflow extends ArcanistWorkflow {
   private $shouldAmendWithoutPrompt = false;
   private $shouldAmendAutofixesWithoutPrompt = false;
   private $engine;
-  private $postponedLinters;
 
   public function getWorkflowName() {
     return 'lint';
@@ -96,6 +94,11 @@ EOTEXT
           "With 'none', show no lint warnings. ".
           "With 'compiler', show lint warnings in suitable for your editor. ".
           "With 'xml', show lint warnings in the Checkstyle XML format."),
+      ),
+      'outfile' => array(
+        'param' => 'path',
+        'help' => pht(
+          'Output the linter results to a file. Defaults to stdout.'),
       ),
       'only-new' => array(
         'param' => 'bool',
@@ -394,12 +397,6 @@ EOTEXT
       }
     }
 
-    // It'd be nice to just return a single result from the run method above
-    // which contains both the lint messages and the postponed linters.
-    // However, to maintain compatibility with existing lint subclasses, use
-    // a separate method call to grab the postponed linters.
-    $this->postponedLinters = $engine->getPostponedLinters();
-
     if ($this->getArgument('never-apply-patches')) {
       $apply_patches = false;
     } else {
@@ -464,7 +461,19 @@ EOTEXT
     }
 
     $all_autofix = true;
-    $console->writeOut('%s', $renderer->renderPreamble());
+    $tmp = null;
+
+    if ($this->getArgument('outfile') !== null) {
+      $tmp = id(new TempFile())
+        ->setPreserveFile(true);
+    }
+
+    $preamble = $renderer->renderPreamble();
+    if ($tmp) {
+      Filesystem::appendFile($tmp, $preamble);
+    } else {
+      $console->writeOut('%s', $preamble);
+    }
 
     foreach ($results as $result) {
       $result_all_autofix = $result->isAllAutofix();
@@ -479,7 +488,11 @@ EOTEXT
 
       $lint_result = $renderer->renderLintResult($result);
       if ($lint_result) {
-        $console->writeOut('%s', $lint_result);
+        if ($tmp) {
+          Filesystem::appendFile($tmp, $lint_result);
+        } else {
+          $console->writeOut('%s', $lint_result);
+        }
       }
 
       if ($apply_patches && $result->isPatchable()) {
@@ -505,7 +518,7 @@ EOTEXT
           $prompt = pht(
             'Apply this patch to %s?',
             phutil_console_format('__%s__', $result->getPath()));
-          if (!$console->confirm($prompt, $default_no = false)) {
+          if (!$console->confirm($prompt, $default = true)) {
             continue;
           }
         }
@@ -516,7 +529,13 @@ EOTEXT
       }
     }
 
-    $console->writeOut('%s', $renderer->renderPostamble());
+    $postamble = $renderer->renderPostamble();
+    if ($tmp) {
+      Filesystem::appendFile($tmp, $postamble);
+      Filesystem::rename($tmp, $this->getArgument('outfile'));
+    } else {
+      $console->writeOut('%s', $postamble);
+    }
 
     if ($wrote_to_disk && $this->shouldAmendChanges) {
       if ($this->shouldAmendWithoutPrompt ||
@@ -623,8 +642,6 @@ EOTEXT
       $result_code = self::RESULT_ERRORS;
     } else if ($has_warnings) {
       $result_code = self::RESULT_WARNINGS;
-    } else if (!empty($this->postponedLinters)) {
-      $result_code = self::RESULT_POSTPONED;
     } else {
       $result_code = self::RESULT_OKAY;
     }
@@ -640,10 +657,6 @@ EOTEXT
 
   public function getUnresolvedMessages() {
     return $this->unresolvedMessages;
-  }
-
-  public function getPostponedLinters() {
-    return $this->postponedLinters;
   }
 
 }

@@ -17,7 +17,6 @@ final class ArcanistDiffWorkflow extends ArcanistWorkflow {
   private $testResults;
   private $diffID;
   private $revisionID;
-  private $postponedLinters;
   private $haveUncommittedChanges = false;
   private $diffPropertyFutures = array();
   private $commitMessageFromRevision;
@@ -476,7 +475,6 @@ EOTEXT
 
     $lint_result = $data['lintResult'];
     $this->unresolvedLint = $data['unresolvedLint'];
-    $this->postponedLinters = $data['postponedLinters'];
     $unit_result = $data['unitResult'];
     $this->testResults = $data['testResults'];
 
@@ -964,9 +962,9 @@ EOTEXT
         'works best for changes which will receive detailed human review, '.
         'and not as well for large automated changes or bulk checkins. '.
         'See %s for information about reviewing big checkins. Continue anyway?',
-        new PhutilNumber(count($changes)),
-        'http://www.phabricator.com/docs/phabricator/article/'.
-        'Differential_User_Guide_Large_Changes.html');
+        phutil_count($changes),
+        'https://secure.phabricator.com/book/phabricator/article/'.
+          'differential_large_changes/');
 
       if (!phutil_console_confirm($message)) {
         throw new ArcanistUsageException(
@@ -1032,9 +1030,8 @@ EOTEXT
               } catch (ConduitClientException $e) {
                 if ($e->getErrorCode() == 'ERR-BAD-ARCANIST-PROJECT') {
                   echo phutil_console_wrap(
-                    "%s\n",
-                    pht('Lookup of encoding in arcanist project failed'),
-                    $e->getMessage());
+                    pht('Lookup of encoding in arcanist project failed: %s',
+                        $e->getMessage())."\n");
                 } else {
                   throw $e;
                 }
@@ -1073,18 +1070,18 @@ EOTEXT
             'contain invalid byte sequences). You can either stop this '.
             'workflow and fix these files, or continue. If you continue, '.
             'these files will be marked as binary.',
-            new PhutilNumber(count($utf8_problems))),
+            phutil_count($utf8_problems)),
           pht(
             "You can learn more about how Phabricator handles character ".
             "encodings (and how to configure encoding settings and detect and ".
             "correct encoding problems) by reading 'User Guide: UTF-8 and ".
             "Character Encoding' in the Phabricator documentation."),
           pht(
-            '%d AFFECTED FILE(S)',
-            count($utf8_problems)));
+            '%s AFFECTED FILE(S)',
+            phutil_count($utf8_problems)));
       $confirm = pht(
         'Do you want to mark these %s file(s) as binary and continue?',
-        new PhutilNumber(count($utf8_problems)));
+        phutil_count($utf8_problems));
 
       echo phutil_console_format(
         "**%s**\n",
@@ -1222,7 +1219,6 @@ EOTEXT
     return array(
       'lintResult' => $lint_result,
       'unresolvedLint' => $this->unresolvedLint,
-      'postponedLinters' => $this->postponedLinters,
       'unitResult' => $unit_result,
       'testResults' => $this->testResults,
     );
@@ -1290,20 +1286,12 @@ EOTEXT
             pht('Lint issued unresolved errors!'),
             'lint-excuses');
           break;
-        case ArcanistLintWorkflow::RESULT_POSTPONED:
-          $this->console->writeOut(
-            "<bg:yellow>** %s **</bg> %s\n",
-            pht('LINT POSTPONED'),
-            pht('Lint results are postponed.'));
-          break;
       }
 
       $this->unresolvedLint = array();
       foreach ($lint_workflow->getUnresolvedMessages() as $message) {
         $this->unresolvedLint[] = $message->toDictionary();
       }
-
-      $this->postponedLinters = $lint_workflow->getPostponedLinters();
 
       return $lint_result;
     } catch (ArcanistNoEngineException $ex) {
@@ -2260,7 +2248,6 @@ EOTEXT
       ArcanistLintWorkflow::RESULT_ERRORS     => 'fail',
       ArcanistLintWorkflow::RESULT_WARNINGS   => 'warn',
       ArcanistLintWorkflow::RESULT_SKIP       => 'skip',
-      ArcanistLintWorkflow::RESULT_POSTPONED  => 'postponed',
     );
     return idx($map, $lint_result, 'none');
   }
@@ -2275,7 +2262,6 @@ EOTEXT
       ArcanistUnitWorkflow::RESULT_FAIL       => 'fail',
       ArcanistUnitWorkflow::RESULT_UNSOUND    => 'warn',
       ArcanistUnitWorkflow::RESULT_SKIP       => 'skip',
-      ArcanistUnitWorkflow::RESULT_POSTPONED  => 'postponed',
     );
     return idx($map, $unit_result, 'none');
   }
@@ -2680,8 +2666,13 @@ EOTEXT
       pht('PUSH STAGING'),
       pht('Pushing changes to staging area...'));
 
+    $push_flags = array();
+    if (version_compare($api->getGitVersion(), '1.8.2', '>=')) {
+      $push_flags[] = '--no-verify';
+    }
     $err = phutil_passthru(
-      'git push --no-verify -- %s %s:refs/tags/%s',
+      'git push %Ls -- %s %s:refs/tags/%s',
+      $push_flags,
       $staging_uri,
       $commit,
       $tag);
@@ -2762,15 +2753,7 @@ EOTEXT
         $unit[$key] = $this->getModernUnitDictionary($message);
       }
 
-      switch ($unit_result) {
-        case ArcanistUnitWorkflow::RESULT_OKAY:
-        case ArcanistUnitWorkflow::RESULT_SKIP:
-          $type = 'pass';
-          break;
-        default:
-          $type = 'fail';
-          break;
-      }
+      $type = ArcanistUnitWorkflow::getHarbormasterTypeFromResult($unit_result);
 
       $futures[] = $this->getConduit()->callMethod(
         'harbormaster.sendmessage',
@@ -2792,25 +2775,6 @@ EOTEXT
       phlog($ex);
       return false;
     }
-  }
-
-  private function getModernLintDictionary(array $map) {
-    $map = $this->getModernCommonDictionary($map);
-    return $map;
-  }
-
-  private function getModernUnitDictionary(array $map) {
-    $map = $this->getModernCommonDictionary($map);
-    return $map;
-  }
-
-  private function getModernCommonDictionary(array $map) {
-    foreach ($map as $key => $value) {
-      if ($value === null) {
-        unset($map[$key]);
-      }
-    }
-    return $map;
   }
 
 }

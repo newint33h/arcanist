@@ -72,7 +72,7 @@ final class ArcanistLintMessage extends Phobject {
   }
 
   public function setLine($line) {
-    $this->line = $line;
+    $this->line = $this->validateInteger($line, 'setLine');
     return $this;
   }
 
@@ -81,7 +81,7 @@ final class ArcanistLintMessage extends Phobject {
   }
 
   public function setChar($char) {
-    $this->char = $char;
+    $this->char = $this->validateInteger($char, 'setChar');
     return $this;
   }
 
@@ -90,6 +90,23 @@ final class ArcanistLintMessage extends Phobject {
   }
 
   public function setCode($code) {
+    $code = (string)$code;
+
+    $maximum_bytes = 128;
+    $actual_bytes = strlen($code);
+
+    if ($actual_bytes > $maximum_bytes) {
+      throw new Exception(
+        pht(
+          'Parameter ("%s") passed to "%s" when constructing a lint message '.
+          'must be a scalar with a maximum string length of %s bytes, but is '.
+          '%s bytes in length.',
+          $code,
+          'setCode()',
+          new PhutilNumber($maximum_bytes),
+          new PhutilNumber($actual_bytes)));
+    }
+
     $this->code = $code;
     return $this;
   }
@@ -223,6 +240,37 @@ final class ArcanistLintMessage extends Phobject {
 
   public function shouldBypassChangedLineFiltering() {
     return $this->bypassChangedLineFiltering;
+  }
+
+  /**
+   * Validate an integer-like value, returning a strict integer.
+   *
+   * Further on, the pipeline is strict about types. We want to be a little
+   * less strict in linters themselves, since they often parse command line
+   * output or XML and will end up with string representations of numbers.
+   *
+   * @param mixed Integer or digit string.
+   * @return int Integer.
+   */
+  private function validateInteger($value, $caller) {
+    if ($value === null) {
+      // This just means that we don't have any information.
+      return null;
+    }
+
+    // Strings like "234" are fine, coerce them to integers.
+    if (is_string($value) && preg_match('/^\d+\z/', $value)) {
+      $value = (int)$value;
+    }
+
+    if (!is_int($value)) {
+      throw new Exception(
+        pht(
+          'Parameter passed to "%s" must be an integer.',
+          $caller.'()'));
+    }
+
+    return $value;
   }
 
 }

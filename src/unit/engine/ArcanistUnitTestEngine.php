@@ -6,7 +6,7 @@
 abstract class ArcanistUnitTestEngine extends Phobject {
 
   private $workingCopy;
-  private $paths;
+  private $paths = array();
   private $arguments = array();
   private $enableAsyncTests;
   private $enableCoverage;
@@ -15,6 +15,10 @@ abstract class ArcanistUnitTestEngine extends Phobject {
   protected $renderer;
 
   final public function __construct() {}
+
+  public function getEngineConfigurationName() {
+    return null;
+  }
 
   final public function setRunAllTests($run_all_tests) {
     if (!$this->supportsRunAllTests() && $run_all_tests) {
